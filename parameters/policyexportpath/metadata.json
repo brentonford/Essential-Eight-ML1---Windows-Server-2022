@@ -1,0 +1,7 @@
+{
+    "externalUuid4": "5c1894ab-dcd2-4d1d-9c7e-0b4aa05c01cd", 
+    "key": "policyexportpath", 
+    "name": "Policy Export Path", 
+    "showInPlan": true, 
+    "type": "c.s.s.b.phv.Text"
+}

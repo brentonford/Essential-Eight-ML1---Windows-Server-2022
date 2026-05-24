@@ -1,0 +1,1 @@
+Configure and verify Australian Signals Directorate Essential Eight Maturity Level 1 controls on Windows Server 2022.

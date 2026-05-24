@@ -1,0 +1,1 @@
+Administrator credential for WinRM connection to the target server.
