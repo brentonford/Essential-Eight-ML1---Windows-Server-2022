@@ -1,0 +1,20 @@
+# Read the current effective policy, switch both Exe and Script
+# rule collections from AuditOnly to Enabled (Enforce), and reapply.
+$effectivePolicyXml = (Get-AppLockerPolicy -Effective).ToXml()
+
+$updatedPolicyXml = $effectivePolicyXml `
+    -replace 'EnforcementMode="AuditOnly"', 'EnforcementMode="Enabled"'
+
+$tempEnforcePath = "$env:TEMP\applocker_enforce.xml"
+$updatedPolicyXml | Out-File -FilePath $tempEnforcePath -Encoding UTF8
+
+Set-AppLockerPolicy -XmlPolicy $tempEnforcePath
+Write-Output "AppLocker enforcement mode set to Enforce for all rule collections."
+
+Remove-Item -Path $tempEnforcePath -Force
+
+# Confirm
+$effectivePolicy = Get-AppLockerPolicy -Effective
+foreach ($collection in $effectivePolicy.RuleCollections) {
+    Write-Output "Rule collection '$($collection.RuleCollectionType)' enforcement: $($collection.EnforcementMode)"
+}

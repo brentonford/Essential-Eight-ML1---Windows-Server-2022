@@ -1,0 +1,19 @@
+$os = Get-CimInstance-ClassName Win32_OperatingSystem
+Write-Output "OS Caption : $($os.Caption)"
+Write-Output "OS Version : $($os.Version)"
+Write-Output "OS Build : $($os.BuildNumber)"
+
+if ($os.Caption -notmatch "Windows Server")
+{
+    Write-Error "This Blueprint requires Windows Server. Detected: $($os.Caption)"
+    exit 1
+}
+
+$appLockerModule = Get-Module -ListAvailable -Name AppLocker
+if ($null -eq $appLockerModule) {
+    Write-Error "AppLocker PowerShell module is not available on this system."
+    exit 1
+}
+
+Write-Output "AppLocker module : Available"
+Write-Output "Prerequisites check passed."

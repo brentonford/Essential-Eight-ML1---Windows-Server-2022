@@ -1,0 +1,88 @@
+# ML1 baseline allow policy — permits execution from Windows and Program Files directories.
+# Applied with -Merge to preserve any existing rules.
+$defaultAllowPolicyXml = @"
+<AppLockerPolicy Version="1">
+  <RuleCollection Type="Exe" EnforcementMode="AuditOnly">
+    <FilePathRule
+        Id="921cc481-6e17-4653-8f75-050b80acca20"
+        Name="Allow Everyone - Windows directory"
+        Description="Allows all users to run executables in the Windows directory."
+        UserOrGroupSid="S-1-1-0"
+        Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%WINDIR%\*"/>
+      </Conditions>
+    </FilePathRule>
+    <FilePathRule
+        Id="a61c8b2c-a23a-4ff7-9a7b-d01f4f0a9e4a"
+        Name="Allow Everyone - Program Files"
+        Description="Allows all users to run executables in Program Files."
+        UserOrGroupSid="S-1-1-0"
+        Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES%\*"/>
+      </Conditions>
+    </FilePathRule>
+    <FilePathRule
+        Id="b7af7102-efde-4369-8a89-7a6a392d1473"
+        Name="Allow Everyone - Program Files (x86)"
+        Description="Allows all users to run executables in Program Files (x86)."
+        UserOrGroupSid="S-1-1-0"
+        Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES(X86)%\*"/>
+      </Conditions>
+    </FilePathRule>
+    <FilePathRule
+        Id="fd686d83-a829-4351-8ff4-27c7de5755d2"
+        Name="Allow Administrators - All files"
+        Description="Allows members of the local Administrators group to run all executables."
+        UserOrGroupSid="S-1-5-32-544"
+        Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="*"/>
+      </Conditions>
+    </FilePathRule>
+  </RuleCollection>
+  <RuleCollection Type="Script" EnforcementMode="AuditOnly">
+    <FilePathRule
+        Id="ed97d0cb-15d3-4d16-84fc-ab0168459041"
+        Name="Allow Everyone - Windows directory (scripts)"
+        Description="Allows all users to run scripts in the Windows directory."
+        UserOrGroupSid="S-1-1-0"
+        Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%WINDIR%\*"/>
+      </Conditions>
+    </FilePathRule>
+    <FilePathRule
+        Id="72ead539-d9e3-4a7c-b98c-2a9ba21cbe45"
+        Name="Allow Everyone - Program Files (scripts)"
+        Description="Allows all users to run scripts in Program Files."
+        UserOrGroupSid="S-1-1-0"
+        Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES%\*"/>
+      </Conditions>
+    </FilePathRule>
+    <FilePathRule
+        Id="a35c0e04-f5a5-41ca-9a1b-38f53a61c09a"
+        Name="Allow Administrators - All scripts"
+        Description="Allows members of the local Administrators group to run all scripts."
+        UserOrGroupSid="S-1-5-32-544"
+        Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="*"/>
+      </Conditions>
+    </FilePathRule>
+  </RuleCollection>
+</AppLockerPolicy>
+"@
+
+$tempPolicyPath = "$env:TEMP\applocker_default_allow.xml"
+$defaultAllowPolicyXml | Out-File -FilePath $tempPolicyPath -Encoding UTF8
+
+Set-AppLockerPolicy -XmlPolicy $tempPolicyPath -Merge
+Write-Output "Default allow rules applied successfully."
+
+Remove-Item -Path $tempPolicyPath -Force

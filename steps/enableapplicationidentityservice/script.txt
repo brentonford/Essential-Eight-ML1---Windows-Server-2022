@@ -1,0 +1,24 @@
+$svc = Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+
+if ($null -eq $svc) {
+    Write-Error "Application Identity service (AppIDSvc) was not found on this system."
+    exit 1
+}
+
+Set-Service -Name AppIDSvc -StartupType Automatic
+Write-Output "AppIDSvc startup type set to Automatic."
+
+if ($svc.Status -ne "Running") {
+    Start-Service -Name AppIDSvc
+    Start-Sleep -Seconds 3
+}
+
+$svc.Refresh()
+Write-Output "AppIDSvc status : $($svc.Status)"
+
+if ($svc.Status -ne "Running") {
+    Write-Error "Application Identity service failed to start."
+    exit 1
+}
+
+Write-Output "Application Identity service is running."
