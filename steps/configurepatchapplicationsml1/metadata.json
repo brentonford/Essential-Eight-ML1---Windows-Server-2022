@@ -1,0 +1,30 @@
+{
+    "actionOnStepFail": "stop", 
+    "concurrency": 1, 
+    "enabled": true, 
+    "externalUuid4": "9eb35e75-a096-4664-a144-0cfa9aab23b3", 
+    "isBlueprint": true, 
+    "key": "configurepatchapplicationsml1", 
+    "links": [
+        {
+            "stepKey": "verifypswindowsupdatemoduleisinstalled"
+        }, 
+        {
+            "stepKey": "installapplicationupdatesviawindowsupdate"
+        }, 
+        {
+            "stepKey": "upgradethirdpartyapplicationsviawinget"
+        }, 
+        {
+            "stepKey": "detectandremoveeolapplications"
+        }, 
+        {
+            "stepKey": "rebootmachine"
+        }, 
+        {
+            "stepKey": "iswindowsup"
+        }
+    ], 
+    "name": "Configure Patch Applications - ML1", 
+    "type": "com.servertribe.attune.tuples.StepGroupTuple"
+}

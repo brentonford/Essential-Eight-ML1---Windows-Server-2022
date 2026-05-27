@@ -1,0 +1,33 @@
+$winget = Get-Command -Name winget -ErrorAction SilentlyContinue
+
+if ($null -eq $winget) {
+    Write-Output "CHECK winget Upgrades : SKIP — winget not available on this system"
+    exit 0
+}
+
+Write-Output "Checking for available winget upgrades..."
+
+$upgradeOutput = winget upgrade --accept-source-agreements --disable-interactivity 2>&1
+$upgradeLines = $upgradeOutput | Where-Object { $_ -match "\S" }
+
+$packageLines = $upgradeLines | Where-Object {
+    $_ -notmatch "^Name" -and
+    $_ -notmatch "^-" -and
+    $_ -notmatch "upgrades available" -and
+    $_ -notmatch "No installed"
+} | Select-Object -Skip 1
+
+$availableCount = ($packageLines | Where-Object { $_ -match "\S" }).Count
+
+if ($availableCount -eq 0) {
+    Write-Output "CHECK winget Upgrades : PASS — no package upgrades available"
+    exit 0
+}
+
+Write-Output "CHECK winget Upgrades : WARN — $availableCount package upgrade(s) available"
+Write-Output ""
+Write-Output "Packages with available upgrades:"
+$packageLines | Where-Object { $_ -match "\S" } | ForEach-Object {
+    Write-Output "  $_"
+}
+exit 1

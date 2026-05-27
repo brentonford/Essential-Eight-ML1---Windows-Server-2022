@@ -1,0 +1,33 @@
+$winget = Get-Command -Name winget -ErrorAction SilentlyContinue
+
+if ($null -eq $winget) {
+    Write-Output "winget is not available on this system. Skipping third-party application upgrades."
+    Write-Output "NOTE: winget is available on Windows Server 2022 with App Installer from the Microsoft Store or via MSIX package."
+    exit 0
+}
+
+Write-Output "winget version: $(winget --version)"
+Write-Output ""
+Write-Output "Listing available upgrades..."
+
+winget upgrade `
+    --accept-source-agreements `
+    --disable-interactivity
+
+Write-Output ""
+Write-Output "Applying all available upgrades..."
+
+winget upgrade `
+    --all `
+    --silent `
+    --accept-package-agreements `
+    --accept-source-agreements `
+    --disable-interactivity
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Output "winget upgrade completed with exit code $LASTEXITCODE."
+    Write-Output "Some packages may have failed to update. Review the output above."
+    exit 0
+}
+
+Write-Output "winget upgrade completed successfully."

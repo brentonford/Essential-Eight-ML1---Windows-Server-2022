@@ -1,0 +1,44 @@
+$eolApplications = @(
+    "Adobe Flash Player",
+    "Internet Explorer",
+    "Java 6",
+    "Java 7",
+    "Java(TM) 6",
+    "Java(TM) 7",
+    "Microsoft Silverlight",
+    "Microsoft Visual C++ 2005",
+    "Microsoft Visual C++ 2008",
+    "Python 2",
+    "7-Zip 1",
+    "7-Zip 2"
+)
+
+$registryPaths = @(
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+)
+
+$installedApps = $registryPaths | ForEach-Object {
+    Get-ItemProperty -Path $_ -ErrorAction SilentlyContinue
+} | Where-Object { $_.DisplayName }
+
+$foundEol = @()
+
+foreach ($eolEntry in $eolApplications) {
+    $matches = $installedApps | Where-Object {
+        $_.DisplayName -like "*$eolEntry*"
+    }
+    $foundEol += $matches
+}
+
+if ($foundEol.Count -eq 0) {
+    Write-Output "CHECK EOL Applications : PASS — no EOL applications detected"
+    exit 0
+}
+
+Write-Output "CHECK EOL Applications : FAIL — $($foundEol.Count) EOL application(s) found"
+Write-Output ""
+$foundEol | ForEach-Object {
+    Write-Output "  EOL: $($_.DisplayName) — version $($_.DisplayVersion)"
+}
+exit 1

@@ -1,0 +1,39 @@
+$module = Get-Module -ListAvailable -Name PSWindowsUpdate
+if ($null -eq $module) {
+    Write-Output "CHECK Update History : SKIP — PSWindowsUpdate not available"
+    exit 1
+}
+
+Import-Module PSWindowsUpdate
+
+$history = Get-WUHistory -MaxDate (Get-Date) -ErrorAction SilentlyContinue |
+    Where-Object { $_.Categories -match "Application" } |
+    Sort-Object Date -Descending |
+    Select-Object -First 10
+
+if ($null -eq $history -or $history.Count -eq 0) {
+    Write-Output "CHECK Update History : WARN — no application update history found"
+    Write-Output "This may indicate applications have never been patched via Windows Update on this server."
+    exit 1
+}
+
+$mostRecent = $history | Select-Object -First 1
+$daysSinceLastUpdate = ((Get-Date) - $mostRecent.Date).Days
+
+Write-Output "Most recent application update : $($mostRecent.Title)"
+Write-Output "Date applied                   : $($mostRecent.Date.ToString('yyyy-MM-dd HH:mm:ss'))"
+Write-Output "Days since last update         : $daysSinceLastUpdate"
+Write-Output ""
+Write-Output "Recent application update history (last 10):"
+$history | ForEach-Object {
+    Write-Output "  [$($_.Date.ToString('yyyy-MM-dd'))] $($_.ResultCode) — $($_.Title)"
+}
+
+Write-Output ""
+
+if ($daysSinceLastUpdate -gt 30) {
+    Write-Output "CHECK Update History : FAIL — last application update was $daysSinceLastUpdate days ago (ML1 threshold: 30 days)"
+    exit 1
+} else {
+    Write-Output "CHECK Update History : PASS — last update within 30-day ML1 threshold"
+}

@@ -1,0 +1,9 @@
+$module = Get-Module -ListAvailable -Name PSWindowsUpdate
+
+if ($null -eq $module) {
+    Write-Output "CHECK PSWindowsUpdate : FAIL — module not installed"
+    Write-Output "Run the Configure Patch Applications Blueprint to resolve this."
+    exit 1
+}
+
+Write-Output "CHECK PSWindowsUpdate : PASS — version $($module.Version)"

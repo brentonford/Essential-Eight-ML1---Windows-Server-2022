@@ -1,0 +1,30 @@
+$rebootRequired = $false
+$reasons = @()
+
+$cbsKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
+if (Test-Path $cbsKey) {
+    $rebootRequired = $true
+    $reasons += "Component Based Servicing reboot pending"
+}
+
+$wuKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+if (Test-Path $wuKey) {
+    $rebootRequired = $true
+    $reasons += "Windows Update reboot required"
+}
+
+$pendingFileKey = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
+$pendingFiles = (Get-ItemProperty -Path $pendingFileKey -Name PendingFileRenameOperations -ErrorAction SilentlyContinue).PendingFileRenameOperations
+if ($pendingFiles) {
+    $rebootRequired = $true
+    $reasons += "Pending file rename operations"
+}
+
+if ($rebootRequired) {
+    Write-Output "REBOOT REQUIRED"
+    $reasons | ForEach-Object { Write-Output "  Reason: $_" }
+}
+
+$WAIT = 10
+shutdown /r /t $WAIT /c "Restart from Attune"
+Write-Host "Restarting in $WAIT seconds."

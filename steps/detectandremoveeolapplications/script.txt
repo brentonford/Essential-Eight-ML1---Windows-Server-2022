@@ -1,0 +1,75 @@
+# EOL applications list — ASD E8 ML1 requires removal of unsupported applications.
+# Extend this list to match your environment's specific risk profile.
+$eolApplications = @(
+    @{ Name = "Adobe Flash Player";          MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Internet Explorer";           MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Java 6";                      MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Java 7";                      MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Java(TM) 6";                  MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Java(TM) 7";                  MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Microsoft Silverlight";       MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Microsoft Visual C++ 2005";   MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Microsoft Visual C++ 2008";   MatchType = "Contains"; WingetId = $null },
+    @{ Name = "Python 2";                    MatchType = "Contains"; WingetId = $null },
+    @{ Name = "7-Zip 1";                     MatchType = "Contains"; WingetId = $null },
+    @{ Name = "7-Zip 2";                     MatchType = "Contains"; WingetId = $null }
+)
+
+$registryPaths = @(
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+)
+
+$installedApps = $registryPaths | ForEach-Object {
+    Get-ItemProperty -Path $_ -ErrorAction SilentlyContinue
+} | Where-Object { $_.DisplayName }
+
+Write-Output "Installed applications scanned: $($installedApps.Count)"
+Write-Output ""
+
+$foundEol = @()
+
+foreach ($eolEntry in $eolApplications) {
+    $matches = $installedApps | Where-Object {
+        $_.DisplayName -like "*$($eolEntry.Name)*"
+    }
+
+    foreach ($match in $matches) {
+        Write-Output "EOL APPLICATION FOUND: $($match.DisplayName) (version: $($match.DisplayVersion))"
+        $foundEol += $match
+    }
+}
+
+if ($foundEol.Count -eq 0) {
+    Write-Output "No EOL applications detected."
+    exit 0
+}
+
+Write-Output ""
+Write-Output "Attempting removal of $($foundEol.Count) EOL application(s)..."
+
+foreach ($app in $foundEol) {
+    Write-Output "Removing: $($app.DisplayName)..."
+
+    if ($app.UninstallString) {
+        $uninstallCmd = $app.UninstallString -replace '/I', '/X'
+
+        if ($uninstallCmd -match "msiexec") {
+            $productCode = ($uninstallCmd | Select-String -Pattern "\{[A-Z0-9\-]+\}").Matches.Value
+            if ($productCode) {
+                Start-Process -FilePath "msiexec.exe" `
+                    -ArgumentList "/X $productCode /qn /norestart" `
+                    -Wait `
+                    -NoNewWindow
+                Write-Output "  Removal attempted via msiexec for $($app.DisplayName)."
+                continue
+            }
+        }
+
+        Write-Output "  Manual removal required for: $($app.DisplayName)"
+        Write-Output "  Uninstall string: $($app.UninstallString)"
+        continue
+    }
+
+    Write-Output "  No uninstall string found for: $($app.DisplayName). Manual removal required."
+}
