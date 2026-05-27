@@ -1,0 +1,145 @@
+$denyPathsExeRaw         = "{denyPathsExe}"
+$denyPathsScriptRaw      = "{denyPathsScript}"
+$expectedEnforcementMode = "{expectedEnforcementMode}".Trim()
+
+$hostname   = $env:COMPUTERNAME
+$reportDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+function Parse-CsvParameter {
+    param([string]$raw)
+
+    $result = @()
+    foreach ($entry in ($raw -split ",")) {
+        $trimmed = $entry.Trim()
+        if ($trimmed -eq "") {
+            continue
+        }
+        $result += $trimmed
+    }
+    return $result
+}
+
+function Get-DenyPathsFromPolicyXml {
+    param([xml]$policyXml, [string]$collectionType)
+
+    $result = @()
+    $xpath = "//RuleCollection[@Type='$collectionType']/FilePathRule[@Action='Deny']/Conditions/FilePathCondition"
+    foreach ($node in $policyXml.SelectNodes($xpath)) {
+        $result += $node.GetAttribute('Path')
+    }
+    return $result
+}
+
+$svc = Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+$startType = if ($null -ne $svc) {
+    (Get-CimInstance -ClassName Win32_Service -Filter "Name='AppIDSvc'").StartMode
+} else {
+    "N/A"
+}
+
+$svcCheck = if ($null -ne $svc -and $svc.Status -eq "Running" -and $startType -eq "Auto") {
+    "PASS"
+} else {
+    "FAIL"
+}
+$effectivePolicy = Get-AppLockerPolicy -Effective -ErrorAction SilentlyContinue
+
+$enforcementCheck     = "FAIL"
+$ruleCount            = 0
+$wrongModeCollections = @()
+$policyXml            = $null
+
+if ($null -ne $effectivePolicy) {
+    $policyXml = [xml]$effectivePolicy.ToXml()
+    $ruleCount = $policyXml.SelectNodes('//RuleCollection/*[@Action]').Count
+
+    $collectionNodes = $policyXml.SelectNodes('//RuleCollection')
+    if ($ruleCount -gt 0 -and $collectionNodes.Count -gt 0) {
+        foreach ($collection in $collectionNodes) {
+            $mode = $collection.GetAttribute('EnforcementMode')
+            $type = $collection.GetAttribute('Type')
+            if ($mode -ne $expectedEnforcementMode) {
+                $wrongModeCollections += "$type=$mode"
+            }
+        }
+        if ($wrongModeCollections.Count -eq 0) {
+            $enforcementCheck = "PASS"
+        }
+    }
+}
+
+$requiredExePaths    = Parse-CsvParameter -raw $denyPathsExeRaw
+$requiredScriptPaths = Parse-CsvParameter -raw $denyPathsScriptRaw
+
+$exePresent    = @()
+$scriptPresent = @()
+if ($null -ne $policyXml) {
+    $exePresent    = Get-DenyPathsFromPolicyXml -policyXml $policyXml -collectionType 'Exe'
+    $scriptPresent = Get-DenyPathsFromPolicyXml -policyXml $policyXml -collectionType 'Script'
+}
+
+$missingExe    = @($requiredExePaths    | Where-Object { $_ -notin $exePresent })
+$missingScript = @($requiredScriptPaths | Where-Object { $_ -notin $scriptPresent })
+
+$blockRuleCheck = if (($missingExe.Count + $missingScript.Count) -eq 0) { "PASS" } else { "FAIL" }
+
+$overallStatus = if ($svcCheck -eq "PASS" -and $enforcementCheck -eq "PASS" -and $blockRuleCheck -eq "PASS") {
+    "COMPLIANT"
+} else {
+    "NON-COMPLIANT"
+}
+
+$separator = "=" * 60
+
+Write-Output $separator
+Write-Output "  ESSENTIAL EIGHT ML1 -- APPLICATION CONTROL"
+Write-Output "  ASD Control: Mitigation Strategy 1"
+Write-Output "  Reference  : cyber.gov.au/essential-eight"
+Write-Output $separator
+Write-Output "  Server     : $hostname"
+Write-Output "  Report Date: $reportDate"
+Write-Output "  Generated  : AttuneOps"
+Write-Output $separator
+Write-Output ""
+Write-Output "  CHECKS"
+Write-Output ""
+Write-Output "  [1] Application Identity Service (AppIDSvc)"
+Write-Output "      Status    : $(if ($null -ne $svc) { $svc.Status } else { 'NOT FOUND' })"
+Write-Output "      StartType : $startType"
+Write-Output "      Result    : $svcCheck"
+Write-Output ""
+Write-Output "  [2] AppLocker Enforcement Mode"
+Write-Output "      Total rules in policy : $ruleCount"
+Write-Output "      Expected mode         : $expectedEnforcementMode"
+if ($wrongModeCollections.Count -gt 0) {
+    Write-Output "      Actual modes          : $($wrongModeCollections -join ', ')"
+}
+Write-Output "      Result                : $enforcementCheck"
+Write-Output ""
+Write-Output "  [3] User-Writable Path Block Rules"
+Write-Output "      Exe deny paths found    : $($exePresent.Count)"
+Write-Output "      Script deny paths found : $($scriptPresent.Count)"
+if ($missingExe.Count -gt 0) {
+    Write-Output "      Missing Exe deny rules:"
+    $missingExe | ForEach-Object { Write-Output "        - $_" }
+}
+if ($missingScript.Count -gt 0) {
+    Write-Output "      Missing Script deny rules:"
+    $missingScript | ForEach-Object { Write-Output "        - $_" }
+}
+if (($missingExe.Count + $missingScript.Count) -eq 0) {
+    Write-Output "      All required paths blocked in both collections."
+}
+Write-Output "      Result : $blockRuleCheck"
+Write-Output ""
+Write-Output $separator
+Write-Output "  OVERALL STATUS : $overallStatus"
+Write-Output $separator
+
+if ($overallStatus -ne "COMPLIANT") {
+    Write-Output "  REMEDIATION: Run the Configure AppLocker Application Control - ML1"
+    Write-Output "  Blueprint against this server to restore compliance."
+    exit 1
+}
+
+exit 0

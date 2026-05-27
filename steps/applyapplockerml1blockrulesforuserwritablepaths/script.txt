@@ -1,89 +1,98 @@
-# ML1 block policy — denies execution from user-writable locations.
-# These are the paths where malware typically lands from email or browser downloads.
-# Deny rules for Everyone (S-1-1-0) take effect after the default allow rules above.
-$blockPolicyXml = @"
+$denyPathsExeRaw    = "{denyPathsExe}"
+$denyPathsScriptRaw = "{denyPathsScript}"
+
+class AppLockerDenyRuleXml {
+    [string]$path
+
+    AppLockerDenyRuleXml([string]$path) {
+        $this.path = $path
+    }
+
+    [string] ToXml() {
+        $ruleId = [guid]::NewGuid().Guid
+        $escapedPath = [System.Security.SecurityElement]::Escape($this.path)
+        $escapedName = [System.Security.SecurityElement]::Escape("Block Everyone - $($this.path)")
+        $escapedDesc = [System.Security.SecurityElement]::Escape("Blocks execution from $($this.path)")
+
+        return @"
+    <FilePathRule Id="$ruleId" Name="$escapedName" Description="$escapedDesc" UserOrGroupSid="S-1-1-0" Action="Deny">
+      <Conditions>
+        <FilePathCondition Path="$escapedPath"/>
+      </Conditions>
+    </FilePathRule>
+"@
+    }
+}
+
+function Parse-CsvParameter {
+    param([string]$raw)
+
+    $result = @()
+    foreach ($entry in ($raw -split ",")) {
+        $trimmed = $entry.Trim()
+        if ($trimmed -eq "") {
+            continue
+        }
+        $result += $trimmed
+    }
+    return $result
+}
+
+function Test-AppLockerPath {
+    param([string]$path)
+
+    $supportedVars = @('%WINDIR%', '%SYSTEM32%', '%OSDRIVE%', '%PROGRAMFILES%', '%REMOVABLE%', '%HOT%')
+
+    if ($path -notmatch '^%') {
+        return # Literal path - valid, no variable to check
+    }
+
+    $firstVar = ($path -split '\\')[0]
+    if ($firstVar -notin $supportedVars) {
+        Write-Output "WARNING : path '$path' starts with '$firstVar', which is not an AppLocker-recognised variable. Rule will be stored as literal text and will not match real files."
+    }
+}
+
+$denyPathsExe    = Parse-CsvParameter -raw $denyPathsExeRaw
+$denyPathsScript = Parse-CsvParameter -raw $denyPathsScriptRaw
+
+if ($denyPathsExe.Count -eq 0 -and $denyPathsScript.Count -eq 0) {
+    Write-Error "Both denyPathsExe and denyPathsScript are empty. At least one deny path is required."
+    exit 1
+}
+
+Write-Output "Exe deny rules to apply    : $($denyPathsExe.Count)"
+Write-Output "Script deny rules to apply : $($denyPathsScript.Count)"
+
+foreach ($path in ($denyPathsExe + $denyPathsScript)) {
+    Test-AppLockerPath -path $path
+}
+
+$exeRulesXml = @()
+foreach ($path in $denyPathsExe) {
+    $exeRulesXml += [AppLockerDenyRuleXml]::new($path).ToXml()
+}
+
+$scriptRulesXml = @()
+foreach ($path in $denyPathsScript) {
+    $scriptRulesXml += [AppLockerDenyRuleXml]::new($path).ToXml()
+}
+
+$policyXml = @"
 <AppLockerPolicy Version="1">
   <RuleCollection Type="Exe" EnforcementMode="AuditOnly">
-    <FilePathRule
-        Id="2d9b0de6-1f8a-4b72-a9e7-c3e6f5a02b41"
-        Name="Block Everyone - TEMP directory"
-        Description="ASD E8 ML1: Blocks execution of executables from the TEMP directory."
-        UserOrGroupSid="S-1-1-0"
-        Action="Deny">
-      <Conditions>
-        <FilePathCondition Path="%TEMP%\*"/>
-      </Conditions>
-    </FilePathRule>
-    <FilePathRule
-        Id="3e1a7f5b-2c9d-4e83-b0f8-d4a7e6c13b52"
-        Name="Block Everyone - APPDATA Roaming"
-        Description="ASD E8 ML1: Blocks execution of executables from AppData\Roaming."
-        UserOrGroupSid="S-1-1-0"
-        Action="Deny">
-      <Conditions>
-        <FilePathCondition Path="%APPDATA%\*"/>
-      </Conditions>
-    </FilePathRule>
-    <FilePathRule
-        Id="4f2b8a6c-3d0e-5f94-c1a9-e5b8f7d24c63"
-        Name="Block Everyone - LOCALAPPDATA"
-        Description="ASD E8 ML1: Blocks execution of executables from AppData\Local."
-        UserOrGroupSid="S-1-1-0"
-        Action="Deny">
-      <Conditions>
-        <FilePathCondition Path="%LOCALAPPDATA%\*"/>
-      </Conditions>
-    </FilePathRule>
-    <FilePathRule
-        Id="5a3c9b7d-4e1f-6a05-d2ba-f6c9a8e35d74"
-        Name="Block Everyone - Downloads folder"
-        Description="ASD E8 ML1: Blocks execution of executables from the user Downloads folder."
-        UserOrGroupSid="S-1-1-0"
-        Action="Deny">
-      <Conditions>
-        <FilePathCondition Path="%USERPROFILE%\Downloads\*"/>
-      </Conditions>
-    </FilePathRule>
+$($exeRulesXml -join "`n")
   </RuleCollection>
   <RuleCollection Type="Script" EnforcementMode="AuditOnly">
-    <FilePathRule
-        Id="6b4d0c8e-5f2a-7b16-e3cb-a7daB9f46e85"
-        Name="Block Everyone - TEMP directory (scripts)"
-        Description="ASD E8 ML1: Blocks script execution from the TEMP directory."
-        UserOrGroupSid="S-1-1-0"
-        Action="Deny">
-      <Conditions>
-        <FilePathCondition Path="%TEMP%\*"/>
-      </Conditions>
-    </FilePathRule>
-    <FilePathRule
-        Id="7c5e1d9f-6a3b-8c27-f4dc-b8ebC0a57f96"
-        Name="Block Everyone - APPDATA Roaming (scripts)"
-        Description="ASD E8 ML1: Blocks script execution from AppData\Roaming."
-        UserOrGroupSid="S-1-1-0"
-        Action="Deny">
-      <Conditions>
-        <FilePathCondition Path="%APPDATA%\*"/>
-      </Conditions>
-    </FilePathRule>
-    <FilePathRule
-        Id="8d6f2e0a-7b4c-9d38-a5ed-c9fcD1b68a07"
-        Name="Block Everyone - Downloads folder (scripts)"
-        Description="ASD E8 ML1: Blocks script execution from the user Downloads folder."
-        UserOrGroupSid="S-1-1-0"
-        Action="Deny">
-      <Conditions>
-        <FilePathCondition Path="%USERPROFILE%\Downloads\*"/>
-      </Conditions>
-    </FilePathRule>
+$($scriptRulesXml -join "`n")
   </RuleCollection>
 </AppLockerPolicy>
 "@
 
-$tempBlockPolicyPath = "$env:TEMP\applocker_ml1_block.xml"
-$blockPolicyXml | Out-File -FilePath $tempBlockPolicyPath -Encoding UTF8
+$tempPolicyPath = "$env:TEMP\applocker_deny.xml"
+$policyXml | Out-File -FilePath $tempPolicyPath -Encoding UTF8
 
-Set-AppLockerPolicy -XmlPolicy $tempBlockPolicyPath -Merge
-Write-Output "ML1 block rules applied successfully."
+Set-AppLockerPolicy -XmlPolicy $tempPolicyPath -Merge
+Write-Output "Deny rules applied successfully."
 
-Remove-Item -Path $tempBlockPolicyPath -Force
+Remove-Item -Path $tempPolicyPath -Force

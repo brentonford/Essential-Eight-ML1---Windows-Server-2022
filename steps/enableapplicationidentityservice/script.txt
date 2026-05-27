@@ -5,8 +5,16 @@ if ($null -eq $svc) {
     exit 1
 }
 
-Set-Service -Name AppIDSvc -StartupType Automatic
-Write-Output "AppIDSvc startup type set to Automatic."
+$svcRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\AppIDSvc"
+Set-ItemProperty -Path $svcRegPath -Name "Start" -Value 2 -Type DWord
+
+# Verify the write actually took (Start values: 2=Automatic, 3=Manual, 4=Disabled).
+$startValue = (Get-ItemProperty -Path $svcRegPath -Name "Start").Start
+if ($startValue -ne 2) {
+    Write-Error "Failed to set AppIDSvc Start value to 2 (Automatic). Current value: $startValue"
+    exit 1
+}
+Write-Output "AppIDSvc startup type set to Automatic (registry Start=2, verified)."
 
 if ($svc.Status -ne "Running") {
     Start-Service -Name AppIDSvc

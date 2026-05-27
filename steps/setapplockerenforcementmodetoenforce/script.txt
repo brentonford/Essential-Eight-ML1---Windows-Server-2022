@@ -1,20 +1,55 @@
-# Read the current effective policy, switch both Exe and Script
-# rule collections from AuditOnly to Enabled (Enforce), and reapply.
-$effectivePolicyXml = (Get-AppLockerPolicy -Effective).ToXml()
+$enforcementMode = "{enforcementMode}".Trim()
 
-$updatedPolicyXml = $effectivePolicyXml `
-    -replace 'EnforcementMode="AuditOnly"', 'EnforcementMode="Enabled"'
+$validModes = @('AuditOnly', 'Enabled')
+if ($enforcementMode -notin $validModes) {
+    Write-Error "Parameter enforcementMode='$enforcementMode' is invalid. Must be one of: $($validModes -join ', ')"
+    exit 1
+}
+
+$localPolicy = Get-AppLockerPolicy -Local
+
+if ($null -eq $localPolicy) {
+    Write-Error "Local AppLocker policy is empty. Run Steps 4 and 5 before Step 6."
+    exit 1
+}
+
+$policyXml = [xml]$localPolicy.ToXml()
+$ruleCollectionNodes = $policyXml.SelectNodes('//RuleCollection')
+
+if ($ruleCollectionNodes.Count -eq 0) {
+    Write-Error "Local AppLocker policy contains no rule collections. Run Steps 4 and 5 before Step 6."
+    exit 1
+}
+
+if ($enforcementMode -eq 'Enabled') {
+    foreach ($collectionNode in $ruleCollectionNodes) {
+        $type = $collectionNode.GetAttribute('Type')
+        $allowNodes = $collectionNode.SelectNodes(".//*[@Action='Allow']")
+        $allowCount = $allowNodes.Count
+
+        if ($allowCount -eq 0) {
+            Write-Error "Refusing to set enforcementMode='Enabled': collection '$type' contains zero Allow rules. Default-deny with no Allow rules will block all binaries in this collection, including PowerShell and cmd.exe."
+            exit 1
+        }
+        Write-Output "Collection '$type' has $allowCount Allow rule(s) -- safe to enforce."
+    }
+}
+
+foreach ($node in $ruleCollectionNodes) {
+    $node.SetAttribute('EnforcementMode', $enforcementMode)
+}
 
 $tempEnforcePath = "$env:TEMP\applocker_enforce.xml"
-$updatedPolicyXml | Out-File -FilePath $tempEnforcePath -Encoding UTF8
+$policyXml.Save($tempEnforcePath)
 
 Set-AppLockerPolicy -XmlPolicy $tempEnforcePath
-Write-Output "AppLocker enforcement mode set to Enforce for all rule collections."
+Write-Output "AppLocker enforcement mode set to '$enforcementMode' for all local rule collections."
 
 Remove-Item -Path $tempEnforcePath -Force
 
-# Confirm
-$effectivePolicy = Get-AppLockerPolicy -Effective
-foreach ($collection in $effectivePolicy.RuleCollections) {
-    Write-Output "Rule collection '$($collection.RuleCollectionType)' enforcement: $($collection.EnforcementMode)"
+$confirmXml = [xml](Get-AppLockerPolicy -Local).ToXml()
+foreach ($node in $confirmXml.SelectNodes('//RuleCollection')) {
+    $type = $node.GetAttribute('Type')
+    $mode = $node.GetAttribute('EnforcementMode')
+    Write-Output "Rule collection '$type' enforcement: $mode"
 }

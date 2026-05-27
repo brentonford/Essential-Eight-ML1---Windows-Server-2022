@@ -1,4 +1,4 @@
-$os = Get-CimInstance-ClassName Win32_OperatingSystem
+$os = Get-CimInstance -ClassName Win32_OperatingSystem
 Write-Output "OS Caption : $($os.Caption)"
 Write-Output "OS Version : $($os.Version)"
 Write-Output "OS Build : $($os.BuildNumber)"
