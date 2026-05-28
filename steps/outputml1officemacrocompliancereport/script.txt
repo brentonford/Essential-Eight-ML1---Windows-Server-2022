@@ -1,0 +1,138 @@
+$hostname   = $env:COMPUTERNAME
+$reportDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+$officeVersions = @("16.0", "15.0", "14.0")
+$officeApps     = @("Word", "Excel", "PowerPoint", "Access", "Publisher", "Outlook", "Visio", "Project")
+
+# Apps for which a given ISM check is not applicable.
+# Outlook does not honour BlockContentExecutionFromInternet or DisableTrustBar --
+# these settings are documented only for Word/Excel/PowerPoint/Access/Publisher/Visio/Project.
+$ism1488NotApplicable = @("Outlook")
+$ism1675NotApplicable = @("Outlook")
+
+# Detect installations
+$detectedApps = @()
+foreach ($version in $officeVersions) {
+    foreach ($app in $officeApps) {
+        if (Test-Path "HKLM:\SOFTWARE\Microsoft\Office\$version\$app") {
+            $detectedApps += [PSCustomObject]@{ Version = $version; App = $app }
+        }
+    }
+}
+
+$separator = "=" * 60
+
+if ($detectedApps.Count -eq 0) {
+    Write-Output $separator
+    Write-Output "  ESSENTIAL EIGHT ML1 -- OFFICE MACRO SETTINGS"
+    Write-Output "  ASD Control: Mitigation Strategy 3"
+    Write-Output "  ISM Controls: 1671, 1488, 1489, 1675"
+    Write-Output "  Reference  : cyber.gov.au/essential-eight"
+    Write-Output $separator
+    Write-Output "  Server     : $hostname"
+    Write-Output "  Report Date: $reportDate"
+    Write-Output "  Generated  : AttuneOps"
+    Write-Output $separator
+    Write-Output ""
+    Write-Output "  OVERALL STATUS : NOT APPLICABLE"
+    Write-Output ""
+    Write-Output "  Microsoft Office is not installed on this server."
+    Write-Output "  No macro configuration is required or applicable."
+    Write-Output "  Document this result in the compliance assessment."
+    Write-Output $separator
+    exit 0
+}
+
+# Collect check results per app
+$results = @()
+
+foreach ($entry in $detectedApps) {
+    $policyPath   = "HKLM:\SOFTWARE\Policies\Microsoft\Office\$($entry.Version)\$($entry.App)\Security"
+    $policyExists = Test-Path $policyPath
+
+    $vbaWarnings = if ($policyExists) {
+        (Get-ItemProperty -Path $policyPath -Name "VBAWarnings" -ErrorAction SilentlyContinue).VBAWarnings
+    } else { $null }
+
+    $blockInternet = if ($policyExists) {
+        (Get-ItemProperty -Path $policyPath -Name "BlockContentExecutionFromInternet" -ErrorAction SilentlyContinue).BlockContentExecutionFromInternet
+    } else { $null }
+
+    $disableTrustBar = if ($policyExists) {
+        (Get-ItemProperty -Path $policyPath -Name "DisableTrustBar" -ErrorAction SilentlyContinue).DisableTrustBar
+    } else { $null }
+
+    $ism1671Result = if ($vbaWarnings -eq 4)    { "PASS" } else { "FAIL" }
+    $ism1489Result = if ($policyExists)         { "PASS" } else { "FAIL" }
+
+    $ism1488Result = if ($entry.App -in $ism1488NotApplicable) {
+        "N/A"
+    } elseif ($blockInternet -eq 1) {
+        "PASS"
+    } else {
+        "FAIL"
+    }
+
+    $ism1675Result = if ($entry.App -in $ism1675NotApplicable) {
+        "N/A"
+    } elseif ($disableTrustBar -eq 1) {
+        "PASS"
+    } else {
+        "FAIL"
+    }
+
+    $results += [PSCustomObject]@{
+        App     = "$($entry.App) $($entry.Version)"
+        ISM1671 = $ism1671Result
+        ISM1488 = $ism1488Result
+        ISM1489 = $ism1489Result
+        ISM1675 = $ism1675Result
+    }
+}
+
+# N/A does not count as FAIL toward overall status.
+$overallFail = $results | Where-Object {
+    $_.ISM1671 -eq "FAIL" -or $_.ISM1488 -eq "FAIL" -or $_.ISM1489 -eq "FAIL" -or $_.ISM1675 -eq "FAIL"
+}
+
+$overallStatus = if ($overallFail.Count -eq 0) { "COMPLIANT" } else { "NON-COMPLIANT" }
+
+Write-Output $separator
+Write-Output "  ESSENTIAL EIGHT ML1 -- OFFICE MACRO SETTINGS"
+Write-Output "  ASD Control: Mitigation Strategy 3"
+Write-Output "  ISM Controls: 1671, 1488, 1489, 1675"
+Write-Output "  Reference  : cyber.gov.au/essential-eight"
+Write-Output $separator
+Write-Output "  Server     : $hostname"
+Write-Output "  Report Date: $reportDate"
+Write-Output "  Generated  : AttuneOps"
+Write-Output $separator
+Write-Output ""
+Write-Output "  Office installations detected: $($detectedApps.Count)"
+Write-Output ""
+Write-Output "  CHECKS PER APPLICATION"
+Write-Output ""
+Write-Output ("  {0,-30} {1,-8} {2,-8} {3,-8} {4,-8}" -f "Application", "ISM1671", "ISM1488", "ISM1489", "ISM1675")
+Write-Output ("  {0,-30} {1,-8} {2,-8} {3,-8} {4,-8}" -f ("-" * 28), "-------", "-------", "-------", "-------")
+
+foreach ($r in $results) {
+    Write-Output ("  {0,-30} {1,-8} {2,-8} {3,-8} {4,-8}" -f $r.App, $r.ISM1671, $r.ISM1488, $r.ISM1489, $r.ISM1675)
+}
+
+Write-Output ""
+Write-Output "  ISM-1671 : Macros disabled for users without business need (VBAWarnings = 4)"
+Write-Output "  ISM-1488 : Internet macros blocked (BlockContentExecutionFromInternet = 1)"
+Write-Output "  ISM-1489 : Settings policy-enforced (HKLM policy path present)"
+Write-Output "  ISM-1675 : Trust bar disabled for unsigned macros (DisableTrustBar = 1)"
+Write-Output "  N/A      : Setting does not apply to this application (e.g. Outlook for ISM-1488/1675)"
+Write-Output ""
+Write-Output $separator
+Write-Output "  OVERALL STATUS : $overallStatus"
+Write-Output $separator
+
+if ($overallStatus -eq "NON-COMPLIANT") {
+    Write-Output ""
+    Write-Output "  REMEDIATION: Run the Configure Office Macro Settings - ML1"
+    Write-Output "  Blueprint against this server to restore compliance."
+    exit 1
+}

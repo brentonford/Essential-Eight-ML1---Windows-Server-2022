@@ -1,0 +1,35 @@
+# AccessVBOM = 0 prevents programmatic access to the VBA object model.
+# This stops macros from modifying other macros at runtime — a common
+# technique used by macro-based malware to inject secondary payloads.
+
+$officeVersions = @("16.0", "15.0", "14.0")
+$officeApps     = @("Word", "Excel", "PowerPoint", "Access", "Publisher", "Visio", "Project")
+
+$configured = 0
+
+foreach ($version in $officeVersions) {
+    foreach ($app in $officeApps) {
+        $detectionPath = "HKLM:\SOFTWARE\Microsoft\Office\$version\$app"
+        if (-not (Test-Path $detectionPath)) {
+            continue
+        }
+
+        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Office\$version\$app\Security"
+
+        if (-not (Test-Path $policyPath)) {
+            New-Item -Path $policyPath -Force | Out-Null
+        }
+
+        Set-ItemProperty -Path $policyPath -Name "AccessVBOM" -Value 0 -Type DWord
+        Write-Output "Set AccessVBOM = 0 on $app $version"
+        $configured++
+    }
+}
+
+if ($configured -eq 0) {
+    Write-Output "No Office installations found. Step not applicable."
+    exit 0
+}
+
+Write-Output ""
+Write-Output "VBA object model access block applied to $configured Office app registration(s)."

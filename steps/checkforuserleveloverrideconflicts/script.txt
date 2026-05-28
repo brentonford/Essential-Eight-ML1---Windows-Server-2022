@@ -1,0 +1,45 @@
+# ISM-1489: Settings cannot be changed by users.
+# This step checks whether any HKCU settings exist that could indicate
+# a user has manually changed macro settings, or that the configuration
+# was applied to the wrong (user) path instead of the policy path.
+#
+# Note: on a server with multiple user profiles, this checks the current
+# user context. For a thorough multi-user check, enumerate profile registry
+# hives from HKEY_USERS (requires loading each user's hive).
+
+$officeVersions = @("16.0", "15.0", "14.0")
+$officeApps     = @("Word", "Excel", "PowerPoint", "Access", "Publisher", "Outlook", "Visio", "Project")
+
+$overridesFound = @()
+
+foreach ($version in $officeVersions) {
+    foreach ($app in $officeApps) {
+        $userPath = "HKCU:\SOFTWARE\Microsoft\Office\$version\$app\Security"
+        if (-not (Test-Path $userPath)) {
+            continue
+        }
+
+        $vbaWarnings = (Get-ItemProperty -Path $userPath -Name "VBAWarnings" -ErrorAction SilentlyContinue).VBAWarnings
+
+        if ($null -eq $vbaWarnings) {
+            continue
+        }
+
+        if ($vbaWarnings -ne 4) {
+            $overridesFound += "$app $version : HKCU VBAWarnings = $vbaWarnings"
+            Write-Output "WARN  HKCU override detected — $app $version : VBAWarnings = $vbaWarnings"
+        }
+    }
+}
+
+if ($overridesFound.Count -eq 0) {
+    Write-Output "CHECK User Override Conflicts : PASS — no conflicting HKCU macro settings detected"
+    exit 0
+}
+
+Write-Output ""
+Write-Output "CHECK User Override Conflicts : WARN — $($overridesFound.Count) HKCU setting(s) found that may conflict with policy"
+Write-Output "If HKLM policy path is correctly set, these HKCU values are overridden by policy."
+Write-Output "If policy path was NOT set, these HKCU values are the effective settings."
+
+exit 1

@@ -1,0 +1,33 @@
+$officeVersions = @("16.0", "15.0", "14.0")
+$officeApps     = @("Word", "Excel", "PowerPoint", "Access", "Publisher", "Visio", "Project")
+
+$totalChecked = 0
+$totalFailed  = 0
+
+foreach ($version in $officeVersions) {
+    foreach ($app in $officeApps) {
+        $detectionPath = "HKLM:\SOFTWARE\Microsoft\Office\$version\$app"
+        if (-not (Test-Path $detectionPath)) {
+            continue
+        }
+
+        $totalChecked++
+        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Office\$version\$app\Security"
+        $value = (Get-ItemProperty -Path $policyPath -Name "AccessVBOM" -ErrorAction SilentlyContinue).AccessVBOM
+
+        if ($value -ne 0) {
+            Write-Output "FAIL  AccessVBOM — $app $version : value is '$value' (required: 0)"
+            $totalFailed++
+            continue
+        }
+
+        Write-Output "PASS  AccessVBOM — $app $version"
+    }
+}
+
+Write-Output ""
+Write-Output "CHECK AccessVBOM : $($totalChecked - $totalFailed)/$totalChecked passed"
+
+if ($totalFailed -gt 0 ) {
+    exit 1
+}

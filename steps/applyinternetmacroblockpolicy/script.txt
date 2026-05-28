@@ -1,0 +1,35 @@
+# ISM-1488: Macros in files originating from the internet are blocked.
+# BlockContentExecutionFromInternet = 1 prevents macro execution in files
+# tagged with a Mark of the Web (MotW) zone identifier by Windows.
+
+$officeVersions = @("16.0", "15.0", "14.0")
+$officeApps     = @("Word", "Excel", "PowerPoint", "Access", "Publisher", "Visio", "Project")
+
+$configured = 0
+
+foreach ($version in $officeVersions) {
+    foreach ($app in $officeApps) {
+        $detectionPath = "HKLM:\SOFTWARE\Microsoft\Office\$version\$app"
+        if (-not (Test-Path $detectionPath)) {
+            continue
+        }
+
+        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Office\$version\$app\Security"
+
+        if (-not (Test-Path $policyPath)) {
+            New-Item -Path $policyPath -Force | Out-Null
+        }
+
+        Set-ItemProperty -Path $policyPath -Name "BlockContentExecutionFromInternet" -Value 1 -Type DWord
+        Write-Output "Set BlockContentExecutionFromInternet = 1 on $app $version"
+        $configured++
+    }
+}
+
+if ($configured -eq 0) {
+    Write-Output "No Office installations found. Step not applicable."
+    exit 0
+}
+
+Write-Output ""
+Write-Output "Internet macro block policy applied to $configured Office app registration(s)."

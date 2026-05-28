@@ -1,0 +1,38 @@
+# ISM-1675: Macros digitally signed by an untrusted publisher cannot be enabled
+# via the Message Bar or Backstage View.
+#
+# DisableTrustBar = 1 suppresses the yellow "Enable Content" notification bar
+# when a macro is blocked by policy. This prevents user confusion and eliminates
+# the social engineering vector of "click here to enable this content".
+
+$officeVersions = @("16.0", "15.0", "14.0")
+$officeApps     = @("Word", "Excel", "PowerPoint", "Access", "Publisher", "Visio", "Project")
+
+$configured = 0
+
+foreach ($version in $officeVersions) {
+    foreach ($app in $officeApps) {
+        $detectionPath = "HKLM:\SOFTWARE\Microsoft\Office\$version\$app"
+        if (-not (Test-Path $detectionPath)) {
+            continue
+        }
+
+        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Office\$version\$app\Security"
+
+        if (-not (Test-Path $policyPath)) {
+            New-Item -Path $policyPath -Force | Out-Null
+        }
+
+        Set-ItemProperty -Path $policyPath -Name "DisableTrustBar" -Value 1 -Type DWord
+        Write-Output "Set DisableTrustBar = 1 on $app $version"
+        $configured++
+    }
+}
+
+if ($configured -eq 0) {
+    Write-Output "No Office installations found. Step not applicable."
+    exit 0
+}
+
+Write-Output ""
+Write-Output "Trust bar disable policy applied to $configured Office app registration(s)."

@@ -1,0 +1,43 @@
+# ISM-1671: Macros disabled for users without a demonstrated business requirement.
+# ISM-1489: Macro security settings cannot be changed by users.
+#
+# VBAWarnings values:
+#   1 = Enable all macros (non-compliant)
+#   2 = Disable with notification — user can override (non-compliant for ISM-1489)
+#   3 = Disable all except digitally signed (ML2 requirement)
+#   4 = Disable all macros without notification (ML1 requirement)
+#
+# Settings MUST be written to HKLM:\SOFTWARE\Policies\Microsoft\Office\ (the policy path).
+# Writing to HKCU:\SOFTWARE\Microsoft\Office\ is NOT policy-enforced and users can override it.
+
+$officeVersions = @("16.0", "15.0", "14.0")
+$officeApps     = @("Word", "Excel", "PowerPoint", "Access", "Publisher", "Outlook", "Visio", "Project")
+
+$configured = 0
+
+foreach ($version in $officeVersions) {
+    foreach ($app in $officeApps) {
+        $detectionPath = "HKLM:\SOFTWARE\Microsoft\Office\$version\$app"
+        if (-not (Test-Path $detectionPath)) {
+            continue
+        }
+
+        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Office\$version\$app\Security"
+
+        if (-not (Test-Path $policyPath)) {
+            New-Item -Path $policyPath -Force | Out-Null
+        }
+
+        Set-ItemProperty -Path $policyPath -Name "VBAWarnings" -Value 4 -Type DWord
+        Write-Output "Set VBAWarnings = 4 on $app $version"
+        $configured++
+    }
+}
+
+if ($configured -eq 0) {
+    Write-Output "No Office installations found. Step not applicable."
+    exit 0
+}
+
+Write-Output ""
+Write-Output "VBAWarnings policy applied to $configured Office app registration(s)."
