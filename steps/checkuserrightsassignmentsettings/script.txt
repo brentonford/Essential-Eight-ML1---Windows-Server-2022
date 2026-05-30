@@ -1,0 +1,39 @@
+# ISM-1688: Unprivileged accounts cannot logon to privileged operating environments.
+# Checks SeInteractiveLogonRight and SeRemoteInteractiveLogonRight via secedit.
+
+$seceditExport = "$env:TEMP\secpol_ura_verify.cfg"
+secedit /export /cfg $seceditExport /quiet
+
+$content = Get-Content $seceditExport
+
+$getValue = {
+    param([string]$key)
+    $line = $content | Where-Object { $_ -match "^$key\s*=" }
+    if ($line) { ($line -split '=', 2)[1].Trim() } else { "Not configured" }
+}
+
+$interactiveLogon    = & $getValue "SeInteractiveLogonRight"
+$remoteLogon         = & $getValue "SeRemoteInteractiveLogonRight"
+$denyInteractive     = & $getValue "SeDenyInteractiveLogonRight"
+$denyNetwork         = & $getValue "SeDenyNetworkLogonRight"
+$denyRemote          = & $getValue "SeDenyRemoteInteractiveLogonRight"
+
+Remove-Item $seceditExport -Force -ErrorAction SilentlyContinue
+
+Write-Output "User Rights Assignment:"
+Write-Output "  SeInteractiveLogonRight       : $interactiveLogon"
+Write-Output "  SeRemoteInteractiveLogonRight : $remoteLogon"
+Write-Output "  SeDenyInteractiveLogonRight   : $denyInteractive"
+Write-Output "  SeDenyNetworkLogonRight       : $denyNetwork"
+Write-Output "  SeDenyRemoteInteractiveLogonRight : $denyRemote"
+Write-Output ""
+
+# Administrators SID: S-1-5-32-544
+# Local admin accounts SID: S-1-5-114
+$localInteractiveOk = $interactiveLogon -match 'S-1-5-32-544'
+$networkDenyOk      = $denyNetwork -match 'S-1-5-114'
+$remoteDenyOk       = $denyRemote -match 'S-1-5-114'
+
+Write-Output "CHECK ISM-1688 Logon Rights  : $(if ($localInteractiveOk) { 'PASS' } else { 'FAIL — interactive logon not restricted to Administrators' })"
+Write-Output "CHECK ISM-1175 Network Deny  : $(if ($networkDenyOk) { 'PASS' } else { 'FAIL — S-1-5-114 not in deny network logon' })"
+Write-Output "CHECK ISM-1175 RDS Deny      : $(if ($remoteDenyOk) { 'PASS' } else { 'FAIL — S-1-5-114 not in deny RDS logon' })"

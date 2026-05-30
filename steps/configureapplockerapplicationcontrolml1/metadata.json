@@ -22,7 +22,7 @@
             "stepKey": "applyapplockerml1blockrulesforuserwritablepaths"
         }, 
         {
-            "stepKey": "setapplockerenforcementmodetoenforce"
+            "stepKey": "setapplockerenforcementmode"
         }, 
         {
             "stepKey": "archivebaselinepolicytoxml"

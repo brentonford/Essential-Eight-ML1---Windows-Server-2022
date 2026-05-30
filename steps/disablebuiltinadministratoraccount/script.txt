@@ -1,0 +1,56 @@
+# ISM-0445: Dedicated named admin accounts -- not the built-in Administrator.
+# The built-in Administrator (RID 500) is a known attack target whose SID
+# never changes regardless of account rename.
+#
+# SAFETY CHECK: Only disable if at least one other enabled local admin account exists.
+# If built-in Administrator is the only admin, do NOT disable -- flag as gap instead.
+
+$builtInAdmin = Get-LocalUser | Where-Object { $_.SID.Value.EndsWith("-500") }
+
+if ($null -eq $builtInAdmin) {
+    Write-Output "Built-in Administrator account not found. Nothing to do."
+    exit 0
+}
+
+Write-Output "Built-in Administrator account: $($builtInAdmin.Name) (Enabled: $($builtInAdmin.Enabled))"
+
+if (-not $builtInAdmin.Enabled) {
+    Write-Output "Built-in Administrator is already disabled. No action required."
+    exit 0
+}
+
+$adminMembers = Get-LocalGroupMember -Group "Administrators" -ErrorAction Stop
+
+$otherEnabledAdmins = @()
+foreach ($member in $adminMembers) {
+    if ($member.PrincipalSource -ne 'Local' -or $member.ObjectClass -ne 'User') {
+        continue
+    }
+
+    $localUser = Get-LocalUser -SID $member.SID -ErrorAction SilentlyContinue
+    if ($null -eq $localUser) {
+        continue
+    }
+    if (-not $localUser.Enabled) {
+        continue
+    }
+    if ($localUser.SID.Value.EndsWith("-500")) {
+        continue
+    }
+    $otherEnabledAdmins += $localUser
+}
+
+if ($otherEnabledAdmins.Count -eq 0) {
+    Write-Output ""
+    Write-Output "GAP: No other enabled local admin accounts exist on this server."
+    Write-Output "Built-in Administrator NOT disabled -- disabling it would remove all local admin access."
+    Write-Output "ACTION REQUIRED: Create a named admin account, then re-run this Blueprint."
+    exit 1
+}
+
+Write-Output "Named admin account(s) confirmed: $($otherEnabledAdmins.Count) found."
+Write-Output "Disabling built-in Administrator account: $($builtInAdmin.Name)"
+
+Disable-LocalUser -Name $builtInAdmin.Name
+Write-Output "Built-in Administrator account disabled."
+Write-Output "ISM-0445: Built-in Administrator disabled. Named admin account(s) remain active."

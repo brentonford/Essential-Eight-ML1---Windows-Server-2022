@@ -1,0 +1,41 @@
+# ISM-0445: Privileged users are assigned a dedicated privileged account.
+# This step produces the pre-change inventory. Output is the change management record.
+
+$adminMembers = Get-LocalGroupMember -Group "Administrators" -ErrorAction Stop
+
+Write-Output "=== Admin Account Inventory -- $env:COMPUTERNAME ==="
+Write-Output "Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Output ""
+Write-Output "Administrators group members: $($adminMembers.Count)"
+Write-Output ""
+
+foreach ($member in $adminMembers) {
+    $accountType = switch ($member.PrincipalSource) {
+        'Local'           { 'Local' }
+        'ActiveDirectory' { 'Domain' }
+        default           { $member.PrincipalSource.ToString() }
+    }
+
+    # Non-local-user members (groups, domain accounts, MSAs): report what we have and move on.
+    if ($member.PrincipalSource -ne 'Local' -or $member.ObjectClass -ne 'User') {
+        Write-Output "  [$accountType $($member.ObjectClass)] $($member.Name) (SID: $($member.SID.Value))"
+        continue
+    }
+
+    $account = Get-LocalUser -SID $member.SID -ErrorAction SilentlyContinue
+    if ($null -eq $account) {
+        Write-Output "  [$accountType] $($member.Name) (local user lookup failed)"
+        continue
+    }
+
+    $lastLogon   = if ($account.LastLogon)       { $account.LastLogon.ToString("yyyy-MM-dd HH:mm:ss") } else { "Never" }
+    $passwordAge = if ($account.PasswordLastSet) { ((Get-Date) - $account.PasswordLastSet).Days }       else { "Unknown" }
+    $isBuiltIn   = $account.SID.Value.EndsWith("-500")
+
+    Write-Output "  [Local] $($account.Name)"
+    Write-Output "    Enabled        : $($account.Enabled)"
+    Write-Output "    Built-in (RID) : $isBuiltIn"
+    Write-Output "    Last logon     : $lastLogon"
+    Write-Output "    Password age   : $passwordAge days"
+    Write-Output ""
+}

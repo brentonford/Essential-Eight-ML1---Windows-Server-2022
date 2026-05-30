@@ -1,0 +1,39 @@
+# ISM-0445 support: Strong password policy.
+# Reads current local security policy via secedit export.
+
+$seceditExport = "$env:TEMP\secpol_verify.cfg"
+secedit /export /cfg $seceditExport /quiet
+
+$content = Get-Content $seceditExport
+
+$getValue = {
+    param([string]$key)
+    $line = $content | Where-Object { $_ -match "^$key\s*=" }
+    if ($line) { ($line -split '=')[1].Trim() } else { "Not set" }
+}
+
+$minLength   = & $getValue "MinimumPasswordLength"
+$maxAge      = & $getValue "MaximumPasswordAge"
+$minAge      = & $getValue "MinimumPasswordAge"
+$history     = & $getValue "PasswordHistorySize"
+$complexity  = & $getValue "PasswordComplexity"
+
+Remove-Item $seceditExport -Force -ErrorAction SilentlyContinue
+
+Write-Output "Current password policy:"
+Write-Output "  MinimumPasswordLength : $minLength  (required: >= 14)"
+Write-Output "  MaximumPasswordAge    : $maxAge     (required: <= 365)"
+Write-Output "  MinimumPasswordAge    : $minAge     (required: >= 1)"
+Write-Output "  PasswordHistorySize   : $history    (required: >= 12)"
+Write-Output "  PasswordComplexity    : $complexity (required: 1)"
+
+$passCheck = (
+    ([int]$minLength -ge 14) -and
+    ([int]$maxAge   -le 365 -and [int]$maxAge -gt 0) -and
+    ([int]$minAge   -ge 1) -and
+    ([int]$history  -ge 12) -and
+    ($complexity    -eq "1")
+)
+
+Write-Output ""
+Write-Output "CHECK Password Policy : $(if ($passCheck) { 'PASS' } else { 'FAIL' })"

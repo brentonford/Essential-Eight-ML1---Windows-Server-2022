@@ -1,6 +1,6 @@
 $enforcementMode = "{enforcementMode}".Trim()
 
-$validModes = @('AuditOnly', 'Enabled')
+$validModes = @('AuditOnly', 'Enforce')
 if ($enforcementMode -notin $validModes) {
     Write-Error "Parameter enforcementMode='$enforcementMode' is invalid. Must be one of: $($validModes -join ', ')"
     exit 1
@@ -21,14 +21,14 @@ if ($ruleCollectionNodes.Count -eq 0) {
     exit 1
 }
 
-if ($enforcementMode -eq 'Enabled') {
+if ($enforcementMode -eq 'Enforce') {
     foreach ($collectionNode in $ruleCollectionNodes) {
         $type = $collectionNode.GetAttribute('Type')
         $allowNodes = $collectionNode.SelectNodes(".//*[@Action='Allow']")
         $allowCount = $allowNodes.Count
 
         if ($allowCount -eq 0) {
-            Write-Error "Refusing to set enforcementMode='Enabled': collection '$type' contains zero Allow rules. Default-deny with no Allow rules will block all binaries in this collection, including PowerShell and cmd.exe."
+            Write-Error "Refusing to set enforcementMode='Enforce': collection '$type' contains zero Allow rules. Default-deny with no Allow rules will block all binaries in this collection, including PowerShell and cmd.exe."
             exit 1
         }
         Write-Output "Collection '$type' has $allowCount Allow rule(s) -- safe to enforce."

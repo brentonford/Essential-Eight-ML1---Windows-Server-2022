@@ -1,0 +1,35 @@
+# Verifies audit policy is configured to capture privileged account events.
+
+$subcategories = @(
+    "Logon",
+    "Logoff",
+    "Credential Validation",
+    "User Account Management",
+    "Security Group Management",
+    "Sensitive Privilege Use"
+)
+
+$failCount = 0
+
+foreach ($sub in $subcategories) {
+    $result = auditpol /get /subcategory:"$sub" 2>&1
+    $line   = $result | Where-Object { $_ -match $sub }
+
+    if (-not $line) {
+        Write-Output "WARN  $sub : could not read audit setting"
+        continue
+    }
+
+    if ($line -match "Success and Failure") {
+        Write-Output "PASS  $sub : Success and Failure"
+    } elseif ($line -match "Success") {
+        Write-Output "WARN  $sub : Success only (Failure auditing not enabled)"
+        $failCount++
+    } else {
+        Write-Output "FAIL  $sub : No auditing configured"
+        $failCount++
+    }
+}
+
+Write-Output ""
+Write-Output "CHECK Audit Policy : $(if ($failCount -eq 0) { 'PASS' } else { "FAIL — $failCount subcategory/ies need attention" })"

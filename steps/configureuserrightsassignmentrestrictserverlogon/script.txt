@@ -1,0 +1,49 @@
+# ISM-1688: Unprivileged accounts cannot logon to privileged operating environments.
+# A Windows Server is a privileged operating environment.
+# "Allow log on locally" and "Allow log on through RDS" should be restricted
+# to Administrators (and Remote Desktop Users for RDS where required).
+#
+# Implemented via secedit User Rights Assignment in the local security policy.
+
+$seceditExport = "$env:TEMP\secpol_ura.cfg"
+$seceditDb     = "$env:TEMP\secpol_ura.sdb"
+$seceditImport = "$env:TEMP\secpol_ura_new.cfg"
+
+secedit /export /cfg $seceditExport /quiet
+
+$content = Get-Content $seceditExport -Raw
+
+# Allow log on locally: Administrators only
+# SID for Administrators: *S-1-5-32-544
+# SID for Remote Desktop Users: *S-1-5-32-555
+if ($content -match 'SeInteractiveLogonRight') {
+    $content = $content -replace 'SeInteractiveLogonRight\s*=.*', 'SeInteractiveLogonRight = *S-1-5-32-544'
+} else {
+    $content += "`r`nSeInteractiveLogonRight = *S-1-5-32-544"
+}
+
+# Allow log on through RDS: Administrators + Remote Desktop Users
+if ($content -match 'SeRemoteInteractiveLogonRight') {
+    $content = $content -replace 'SeRemoteInteractiveLogonRight\s*=.*', 'SeRemoteInteractiveLogonRight = *S-1-5-32-544,*S-1-5-32-555'
+} else {
+    $content += "`r`nSeRemoteInteractiveLogonRight = *S-1-5-32-544,*S-1-5-32-555"
+}
+
+# Deny log on locally: Guest account
+if ($content -match 'SeDenyInteractiveLogonRight') {
+    $content = $content -replace 'SeDenyInteractiveLogonRight\s*=.*', 'SeDenyInteractiveLogonRight = *S-1-5-32-546'
+} else {
+    $content += "`r`nSeDenyInteractiveLogonRight = *S-1-5-32-546"
+}
+
+$content | Set-Content $seceditImport
+
+secedit /configure /db $seceditDb /cfg $seceditImport /areas USER_RIGHTS /quiet
+
+Remove-Item $seceditExport, $seceditImport, $seceditDb -Force -ErrorAction SilentlyContinue
+
+Write-Output "User Rights Assignment configured:"
+Write-Output "  SeInteractiveLogonRight       : Administrators only"
+Write-Output "  SeRemoteInteractiveLogonRight : Administrators + Remote Desktop Users"
+Write-Output "  SeDenyInteractiveLogonRight   : Guest"
+Write-Output "ISM-1688: Logon rights restricted — unprivileged accounts blocked from this server."

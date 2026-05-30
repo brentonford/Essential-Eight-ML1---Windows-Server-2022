@@ -1,0 +1,35 @@
+# ISM-0445 support: Strong password policy for privileged accounts.
+# Applied to the local machine security policy via net accounts and secedit.
+#
+# Minimum length  : 14 characters
+# Complexity      : Enabled
+# Maximum age     : 365 days
+# Minimum age     : 1 day
+# History         : 12 passwords
+
+$seceditExport = "$env:TEMP\secpol_current.cfg"
+$seceditDb     = "$env:TEMP\secpol.sdb"
+$seceditImport = "$env:TEMP\secpol_new.cfg"
+
+secedit /export /cfg $seceditExport /quiet
+
+$content = Get-Content $seceditExport
+
+$content = $content -replace 'MinimumPasswordLength\s*=\s*\d+',  'MinimumPasswordLength = 14'
+$content = $content -replace 'MaximumPasswordAge\s*=\s*\d+',     'MaximumPasswordAge = 365'
+$content = $content -replace 'MinimumPasswordAge\s*=\s*\d+',     'MinimumPasswordAge = 1'
+$content = $content -replace 'PasswordHistorySize\s*=\s*\d+',    'PasswordHistorySize = 12'
+$content = $content -replace 'PasswordComplexity\s*=\s*\d+',     'PasswordComplexity = 1'
+
+$content | Set-Content $seceditImport
+
+secedit /configure /db $seceditDb /cfg $seceditImport /quiet
+
+Remove-Item $seceditExport, $seceditImport, $seceditDb -Force -ErrorAction SilentlyContinue
+
+Write-Output "Password policy applied:"
+Write-Output "  MinimumPasswordLength : 14"
+Write-Output "  MaximumPasswordAge    : 365 days"
+Write-Output "  MinimumPasswordAge    : 1 day"
+Write-Output "  PasswordHistorySize   : 12"
+Write-Output "  PasswordComplexity    : Enabled"
